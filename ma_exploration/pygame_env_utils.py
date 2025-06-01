@@ -8,6 +8,7 @@ GREEN = (0, 255, 0)
 RED = (255, 0, 0)
 LIGHT_GREEN = (180, 255, 180)
 LIGHT_BLUE = (150, 200, 255)
+GRAY = (220, 220, 220)
 
 
 def world_to_screen(x_m, y_m, screen_height_px, scale):
@@ -48,9 +49,8 @@ def update_moving_obstacles(obstacles, dt, map_bounds):
         mob["pos"] = [x, y]
         mob["vel"] = [vx, vy]
 
-
 class Robot:
-    def __init__(self, x, y, theta, goal, sensor_range, radius=0.5):
+    def __init__(self, x, y, theta, goal, sensor_range, controller, radius=0.5):
         self.x, self.y, self.theta = x, y, theta
         self.v = 0
         self.w = 0
@@ -58,15 +58,15 @@ class Robot:
         self.planner = Planner(goal, sensor_range)
         self.target = goal
         self.sensor_range = sensor_range
+        self.controller = controller
 
-    def update(self, dt):
-        tx, ty = self.planner.plan((self.x, self.y))
-        angle_to_target = math.atan2(ty - self.y, tx - self.x)
-        angle_diff = angle_to_target - self.theta
-        angle_diff = (angle_diff + math.pi) % (2 * math.pi) - math.pi
+    def update(self, dt, obstacles):
+        self.planner.update_local_map((self.x, self.y, self.theta), obstacles)
+        local_goal = self.planner.plan((self.x, self.y))
+        occupancy_grid = self.planner.grid
 
-        self.v = 1.0
-        self.w = 2.0 * angle_diff
+        state = (self.x, self.y, self.theta)
+        self.v, self.w = self.controller.compute_action(state, local_goal, occupancy_grid)
 
         self.x += self.v * math.cos(self.theta) * dt
         self.y += self.v * math.sin(self.theta) * dt
@@ -93,3 +93,19 @@ class Robot:
         dx = math.cos(self.theta) * self.radius * scale * 2
         dy = -math.sin(self.theta) * self.radius * scale * 2
         pygame.draw.line(screen, BLACK, (x_px, y_px), (x_px + int(dx), y_px + int(dy)), 2)
+
+        # Draw occupancy grid (world-aligned)
+        if self.planner.grid:
+            size = len(self.planner.grid)
+            cell_size = self.planner.map_resolution * scale
+            for i in range(size):
+                for j in range(size):
+                    if self.planner.grid[i][j]:
+                        wx = self.x + (j * self.planner.map_resolution - self.sensor_range)
+                        wy = self.y + (i * self.planner.map_resolution - self.sensor_range)
+                        rect_x, rect_y = world_to_screen(wx, wy, screen_height_px, scale)
+                        rect = pygame.Rect(rect_x, rect_y, cell_size, cell_size)
+                        pygame.draw.rect(screen, GRAY, rect)
+
+
+        
