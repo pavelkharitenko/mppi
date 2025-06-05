@@ -1,14 +1,14 @@
-# main.py
 import pygame
 from pygame_env_utils import Robot, draw_obstacles, update_moving_obstacles
 from obstacle_generator import generate_mixed_scene
-
 from controller import *
+from dynamic_models import *
+
 
 MAP_WIDTH_M = 50.0
 MAP_HEIGHT_M = 50.0
-SCREEN_WIDTH_PX = 1000
-SCREEN_HEIGHT_PX = 1000
+SCREEN_WIDTH_PX = 1300
+SCREEN_HEIGHT_PX = 1300
 SCALE = SCREEN_WIDTH_PX / MAP_WIDTH_M
 FPS = 60
 
@@ -18,20 +18,21 @@ clock = pygame.time.Clock()
 
 obstacles = generate_mixed_scene(MAP_WIDTH_M, MAP_HEIGHT_M)
 
+diffdrive = DifferentialDriveDynamics()
 
-"""
-controller = MPPIController(
-    model=None,  # use a simple forward kinematic model
-    horizon=15,
-    num_samples=100,
-    lambda_=1.0,
+controller1 = MPPIController(
+    model=diffdrive,  # use a simple forward kinematic model
+    horizon=250,
+    stepsize=0.05,
+    num_samples=750,
+    lambda_=0.01,
+    noise_std=np.array([0.1,0.02])
 )
-"""
 
-controller1 = GlobalController()
-robot1 = Robot(5, 5, 0, goal=(45, 45), sensor_range=10.0, controller=controller1)
 controller2 = GlobalController()
-robot2 = Robot(5, 45, 0, goal=(45, 45), sensor_range=10.0, controller=controller1)
+robot1 = Robot(5, 5, 0, goal=(45, 45), sensor_range=10.0, dynamics_model=diffdrive, controller=controller1)
+controller2 = GlobalController()
+robot2 = Robot(5, 45, 0, goal=(45, 45), sensor_range=10.0,dynamics_model=diffdrive, controller=controller2)
 
 map_bounds = (0, 0, MAP_WIDTH_M, MAP_HEIGHT_M)
 

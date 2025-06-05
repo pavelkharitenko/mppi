@@ -62,11 +62,7 @@ def generate_moving_obstacles(area_width_m, area_height_m, num_moving, radius=0.
         y = random.uniform(0, area_height_m)
         vx = random.choice([-1, 1]) * random.uniform(*velocity_range)
         vy = random.choice([-1, 1]) * random.uniform(*velocity_range)
-        moving.append({
-            "pos": [x, y],
-            "radius": radius,
-            "vel": [vx, vy]
-        })
+        moving.append((x,y,radius,vx,vy))
     return {"static": [], "moving": moving}
 
 

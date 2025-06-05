@@ -1,7 +1,8 @@
 import pygame
 import math
+import numpy as np
 from planner import Planner
-
+from controller import *
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 GREEN = (0, 255, 0)
@@ -27,53 +28,55 @@ def draw_obstacles(screen, obstacles, scale, screen_height_px):
     for x, y, r in obstacles["static"]:
         x_px, y_px = world_to_screen(x, y, screen_height_px, scale)
         pygame.draw.circle(screen, BLACK, (x_px, y_px), int(r * scale))
-    for mob in obstacles["moving"]:
-        x_px, y_px = world_to_screen(*mob["pos"], screen_height_px, scale)
-        pygame.draw.circle(screen, RED, (x_px, y_px), int(mob["radius"] * scale))
+    for x, y, r, vx, vy in obstacles["moving"]:
+        x_px, y_px = world_to_screen(x, y, screen_height_px, scale)
+        pygame.draw.circle(screen, RED, (x_px, y_px), int(r * scale))
 
 
 def update_moving_obstacles(obstacles, dt, map_bounds):
     x_min, y_min, x_max, y_max = map_bounds
-    for mob in obstacles["moving"]:
-        x, y = mob["pos"]
-        vx, vy = mob["vel"]
+    for i, (x,y,r,vx,vy) in enumerate(obstacles["moving"]):
 
         x += vx * dt
         y += vy * dt
 
-        if x - mob["radius"] < x_min or x + mob["radius"] > x_max:
+        if x - r < x_min or x + r > x_max:
             vx *= -1
-        if y - mob["radius"] < y_min or y + mob["radius"] > y_max:
+        if y - r < y_min or y + r > y_max:
             vy *= -1
 
-        mob["pos"] = [x, y]
-        mob["vel"] = [vx, vy]
+        
+        obstacles["moving"][i] = (x,y, r,vx, vy)
 
 class Robot:
-    def __init__(self, x, y, theta, goal, sensor_range, controller, radius=0.5):
-        self.x, self.y, self.theta = x, y, theta
-        self.v = 0
-        self.w = 0
+    def __init__(self, x, y, theta, goal, sensor_range, dynamics_model, controller, radius=0.5):
+        self.state = np.array([x, y, theta])
         self.radius = radius
         self.planner = Planner(goal, sensor_range)
         self.target = goal
         self.sensor_range = sensor_range
+        self.model = dynamics_model
         self.controller = controller
+        self.planned_trajectory = np.array([])
 
     def update(self, dt, obstacles):
-        self.planner.update_local_map((self.x, self.y, self.theta), obstacles)
-        local_goal = self.planner.plan((self.x, self.y))
+        self.planner.update_local_map(self.state, obstacles)
+        local_goal = self.planner.plan((self.state[0], self.state[1]))
         occupancy_grid = self.planner.grid
 
-        state = (self.x, self.y, self.theta)
-        self.v, self.w = self.controller.compute_action(state, local_goal, occupancy_grid)
+        
+        u = self.controller.compute_action(self.state, local_goal, occupancy_grid)
 
-        self.x += self.v * math.cos(self.theta) * dt
-        self.y += self.v * math.sin(self.theta) * dt
-        self.theta += self.w * dt
+        if isinstance(self.controller, MPPIController):
+            self.planned_trajectory = self.controller.optimal_rollout[0]
+
+        self.state = self.model.step(self.state, u, dt)
 
     def draw(self, screen, scale, screen_height_px):
-        x_px, y_px = world_to_screen(self.x, self.y, screen_height_px, scale)
+        x = self.state[0]
+        y = self.state[1]
+        theta = self.state[2]
+        x_px, y_px = world_to_screen(x, y, screen_height_px, scale)
 
         # Draw sensor range circle
         pygame.draw.circle(screen, LIGHT_BLUE, (x_px, y_px), int(self.sensor_range * scale), width=1)
@@ -84,14 +87,14 @@ class Robot:
         pygame.draw.circle(screen, LIGHT_GREEN, (gx_px, gy_px), 6)
 
         # Draw local goal
-        tx, ty = self.planner.plan((self.x, self.y))
+        tx, ty = self.planner.plan((x, y))
         tx_px, ty_px = world_to_screen(tx, ty, screen_height_px, scale)
         pygame.draw.circle(screen, GREEN, (tx_px, ty_px), 4)
 
         # Draw robot
         pygame.draw.circle(screen, GREEN, (x_px, y_px), int(self.radius * scale))
-        dx = math.cos(self.theta) * self.radius * scale * 2
-        dy = -math.sin(self.theta) * self.radius * scale * 2
+        dx = math.cos(theta) * self.radius * scale * 2
+        dy = -math.sin(theta) * self.radius * scale * 2
         pygame.draw.line(screen, BLACK, (x_px, y_px), (x_px + int(dx), y_px + int(dy)), 2)
 
         # Draw occupancy grid (world-aligned)
@@ -101,11 +104,18 @@ class Robot:
             for i in range(size):
                 for j in range(size):
                     if self.planner.grid[i][j]:
-                        wx = self.x + (j * self.planner.map_resolution - self.sensor_range)
-                        wy = self.y + (i * self.planner.map_resolution - self.sensor_range)
+                        wx = x + (j * self.planner.map_resolution - self.sensor_range)
+                        wy = y + (i * self.planner.map_resolution - self.sensor_range)
                         rect_x, rect_y = world_to_screen(wx, wy, screen_height_px, scale)
                         rect = pygame.Rect(rect_x, rect_y, cell_size, cell_size)
                         pygame.draw.rect(screen, GRAY, rect)
 
 
-        
+        if self.planned_trajectory is not None and len(self.planned_trajectory) > 0:
+            #print("len", len(self.planned_trajectory))
+            for i in range(len(self.planned_trajectory) - 1):
+                x1, y1, _ = self.planned_trajectory[i]
+                x2, y2, _ = self.planned_trajectory[i + 1]
+                p1 = world_to_screen(x1, y1, screen_height_px, scale)
+                p2 = world_to_screen(x2, y2, screen_height_px, scale)
+                pygame.draw.line(screen, (0, 0, 255), p1, p2, 3)  # blue trajectory

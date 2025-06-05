@@ -1,4 +1,6 @@
 import math
+from itertools import chain
+
 
 class Planner:
     def __init__(self, goal, sensor_range, map_resolution=0.25):
@@ -31,7 +33,7 @@ class Planner:
         half_range = self.sensor_range
         resolution = self.map_resolution
 
-        for ox, oy, r in obstacles["static"]:
+        for ox, oy, r in chain(obstacles["static"], [(x, y, r) for (x, y, r, vx, vy) in obstacles["moving"]]):
             dx = ox - x
             dy = oy - y
             dist = math.hypot(dx, dy)
