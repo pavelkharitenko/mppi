@@ -7,8 +7,8 @@ from dynamic_models import *
 
 MAP_WIDTH_M = 50.0
 MAP_HEIGHT_M = 50.0
-SCREEN_WIDTH_PX = 1300
-SCREEN_HEIGHT_PX = 1300
+SCREEN_WIDTH_PX = 1000
+SCREEN_HEIGHT_PX = 1000
 SCALE = SCREEN_WIDTH_PX / MAP_WIDTH_M
 FPS = 60
 
@@ -22,9 +22,9 @@ diffdrive = DifferentialDriveDynamics()
 
 controller1 = MPPIController(
     model=diffdrive,  # use a simple forward kinematic model
-    horizon=250,
-    stepsize=0.05,
-    num_samples=750,
+    horizon=150,
+    stepsize=0.02,
+    num_samples=1000,
     lambda_=0.01,
     noise_std=np.array([0.1,0.02])
 )

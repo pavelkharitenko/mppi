@@ -24,7 +24,7 @@ for i in range(200):
     
     if stop:
 
-        time.sleep(14)
+        #time.sleep(14)
         stop = False
     
     if i % 10 == 0:

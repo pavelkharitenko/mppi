@@ -108,6 +108,72 @@ class MPPIController(BaseController):
 
 
 
+class MAMPPIController(BaseController):
+    """
+    Multi-Agent MPPI controller
+    """
+    def __init__(self, model, horizon, stepsize, num_samples, lambda_, noise_std, num_robots):
+        self.model = model
+        self.horizon = horizon
+        self.dt = stepsize
+        self.num_samples = num_samples
+        self.lambda_ = lambda_
+        self.noise_std = noise_std
+        self.num_robots = num_robots
+
+        self.U = np.zeros((self.num_robots, self.horizon, self.model.control_dim))
+        self.U[...,0] = 0.6
+
+        self.optimal_rollouts = np.zeros((self.num_robots, self.horizon+1, self.model.state_dim))
+
+    
+    def compute_actions(self, states, local_goals, occupancy_grids):
+        pass
+
+
+
+
+
+
+
+class TrackingController(BaseController):
+    """
+    Executes a preplanned sequence of control actions (e.g., from a planner).
+    Assumes the plan is stored in self.optimal_rollout and consumed sequentially.
+    """
+
+    def __init__(self):
+        self.control_trajectory = []
+        self.optimal_rollout = []  # List of (v, w) tuples or np.ndarray
+        self.step_index = 0
+        self.control_dim = None
+        self.state_dim = None 
+
+    def set_plan(self, control_sequence, optimal_rollout):
+        """
+        Set a new plan to follow.
+        control_sequence: list or np.ndarray of shape (T, control_dim)
+        """
+        self.control_trajectory = control_sequence
+        self.optimal_rollout = optimal_rollout
+        #print(self.optimal_rollout)
+        self.step_index = 0
+        self.control_dim = control_sequence.shape[-1]
+        
+
+    def compute_action(self, state, goal, occupancy_grid):
+        """
+        Returns the next control action from the planned sequence.
+        If finished, returns zero velocity.
+        """
+        if self.step_index < len(self.control_trajectory):
+            u = self.control_trajectory[self.step_index]
+            self.step_index += 1
+            return tuple(u)
+        else:
+            print("plan is exhausted")
+            return np.zeros(shape=self.control_dim)  # Stop if plan is exhausted
+
 
 class GlobalController(BaseController):
     """
@@ -122,3 +188,5 @@ class GlobalController(BaseController):
         v = 1.0
         w = 2.0 * angle_diff
         return v, w
+    
+
