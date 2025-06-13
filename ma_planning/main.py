@@ -56,7 +56,7 @@ def step():
     # --- check if MA or SA mode ---
     if use_mamppi:
         states = np.array([r.state for r in robots])
-        goals = np.array([r.goal for r in robots])
+        goals = np.array([r.target for r in robots])
         occupancy_grids = [None for _ in robots]  # or use real ones if needed
 
         joint_actions = mamppi_controller.compute_actions(states, goals, occupancy_grids)

@@ -65,6 +65,9 @@ class Robot:
             self.planner = None  # No planner needed in tracking mode
 
     def update(self, dt, obstacles):
+        """
+        If robot has own controller.
+        """
         if self.local_planning:
             self.planner.update_local_map(self.state, obstacles)
             local_goal = self.planner.plan((self.state[0], self.state[1]))
@@ -80,6 +83,16 @@ class Robot:
             self.planned_trajectory = self.controller.optimal_rollout
 
         self.state = self.model.step(self.state, u, dt)
+
+    def update_state(self, control, dt):
+        """
+        If high-level multi-agent controller computed control input, just update state.
+        """
+        self.state = self.model.step(self.state, control, dt)
+
+    def set_planned_trajectory(self, trajectory):
+        self.planned_trajectory = trajectory
+
 
     def draw(self, screen, scale, screen_height_px):
         x, y, theta = self.state

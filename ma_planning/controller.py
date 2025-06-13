@@ -128,7 +128,9 @@ class MAMPPIController(BaseController):
 
     
     def compute_actions(self, states, local_goals, occupancy_grids):
-        pass
+        
+        
+        return self.U[:,0]
 
 
 
