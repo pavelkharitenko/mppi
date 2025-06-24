@@ -1,7 +1,9 @@
 import math
 import numpy as np
 from plots_utils import *
+from planner import GridInfo
 import matplotlib.pyplot as plt
+
 
 class BaseController:
     def compute_action(self, state, local_goal, occupancy_grid):
@@ -21,7 +23,7 @@ class MPPIController(BaseController):
 
         # nominal control trajectory
         self.U = np.zeros((self.horizon, self.model.control_dim)) # start with zero-mean control traj.
-        self.U[:, 0] = 0.6
+        self.U[:, 0] = 0.45
 
         # optimal rollout
         self.optimal_rollout = np.zeros((1, self.horizon + 1, self.model.state_dim))
@@ -30,8 +32,11 @@ class MPPIController(BaseController):
         self.U_noisy = np.zeros((self.num_samples, self.horizon, self.model.control_dim))
         self.state_rollouts = np.zeros((self.num_samples, self.horizon+1, self.model.state_dim))
 
-    def compute_action(self, state, local_goal, occupancy_grid):
+    def compute_action(self, state, local_goal, grid_info):
         v, w = 0, 0
+
+        state = np.array(state)
+        self.state = state
 
         # sample K x M control inputs
         u_noise = np.random.normal(0, self.noise_std, (self.num_samples, self.horizon, self.model.control_dim))
@@ -39,13 +44,13 @@ class MPPIController(BaseController):
 
         # perform rollouts in parallel and get costs
         self.rollout(state)
-        costs = self.cost_function(local_goal, occupancy_grid)
+        costs = self.cost_function(local_goal, grid_info)
         #print(costs)
 
 
         # compute weights, update nominal control sequence, return first input
         weights = np.exp(-(costs - np.min(costs)) / self.lambda_)
-        #plt.hist(weights, bins=50); plt.show()
+        
         weights /= np.sum(weights)
         self.U = np.sum(weights[:, np.newaxis, np.newaxis] * self.U_noisy, axis=0)
 
@@ -54,12 +59,15 @@ class MPPIController(BaseController):
 
         for k in range(self.horizon):
             u_k = self.U[k]  # shape (control_dim,)
-            state = self.model.step(state, u_k, self.dt)  # shape (state_dim,)
+            #state = self.model.step(state, u_k, self.dt)  # shape (state_dim,)
+            state = np.array(self.model.step_vectorized(state[np.newaxis, :], u_k[np.newaxis, :], self.dt)[0])
             self.optimal_rollout[0, k + 1] = state
 
 
-        #print(self.U[0,:])
+        
         #plot_u_histograms(self.U_noisy, costs, self.lambda_, control_names=["v", "w"])
+        #plot_rollouts_and_hist(self.state_rollouts, weights, goal=local_goal, optimal_rollout=self.optimal_rollout)
+        #plot_rollouts_with_collision(self.state_rollouts, weights, collided_mask=self.collided_mask,goal=local_goal)
         
         return self.U[0,:]
     
@@ -71,40 +79,76 @@ class MPPIController(BaseController):
             state = self.model.step_vectorized(state, U_k, self.dt)
             self.state_rollouts[:, k+1, :] = state
     
-    def cost_function(self, local_goal, occupancy_grid):
+    def cost_function(self, local_goal, grid_info: GridInfo):
         #costs = np.zeros(self.num_samples)
         
-        # compute control input cost
-        cost_sample = 0.001 * np.sum(self.U_noisy**2, axis=(1, 2))
+        # compute control effort cost
+        sigma_inv   = 1.0 / (self.noise_std**2)
+        u_nom = self.U[np.newaxis, :, :]
+        u_delta = self.U_noisy - u_nom
+        u_cost = np.sum(u_nom * sigma_inv * u_nom, axis=-1)
+        u_udelta_cost = 2.0 * np.sum(u_nom * sigma_inv * u_delta, axis=-1)
+
+        cost_sample = (0.5/self.lambda_) * np.sum(u_cost + u_udelta_cost,axis=-1)
+        #cost_sample = 0.01 * np.sum(self.U_noisy**2, axis=(1, 2))
 
         # compute tracking costs
-
-
-        positions = self.state_rollouts[:, 1:, :2]
-        goal_diff = positions - local_goal
-        l2_dist = np.linalg.norm(goal_diff, axis=-1)
+        positions = self.state_rollouts[:, 1:, :2] # get (x,y) pos. of new trajectories
+        goal_diff = positions - local_goal # each x,y pos. 
+        l2_dist = np.linalg.norm(goal_diff, axis=-1) # compute || x_i - x_d ||²
         cost_tracking = np.sum(l2_dist, axis=-1)
 
         
 
-        initial_states = self.state_rollouts[:, 0, :2] # first state is [x, y, theta]
-        final_states = self.state_rollouts[:, -1, :2]  # final state is [x, y, theta]
-        initial_goal_dist = np.linalg.norm(initial_states - local_goal, axis=1)
-        final_dist = np.linalg.norm(final_states - local_goal, axis=1)
+        #initial_states = self.state_rollouts[:, 0, :2] # first state is [x, y, theta]
+        #final_states = self.state_rollouts[:, -1, :2]  # final state is [x, y, theta]
+        
+        #initial_goal_dist = np.linalg.norm(initial_states - local_goal, axis=1)
+        #final_dist = np.linalg.norm(final_states - local_goal, axis=1)
 
 
         # cost obstacle
-        # TODO
+
+        occ = grid_info.occ
+        half = grid_info.half
+        res = grid_info.res 
+        S = grid_info.S
+
+        gx = ((positions[:, :, 0] - (self.state[0] - half)) / res).astype(int)
+        gy = ((positions[:, :, 1] - (self.state[1] - half)) / res).astype(int)
+        gx = np.clip(gx, 0 , S-1)
+        gy = np.clip(gy, 0 , S-1)
+
+        collided = occ[gy, gx]
+        has_collision = np.any(collided, axis=1)
+        self.collided_mask = has_collision
+        #print("has col ### ", has_collision)
+        cost_collision = 2e3 * has_collision.astype(float)
+        
+        #print(cost_collision.shape)
+
+        cost_total = cost_tracking + cost_collision + cost_sample
+
+        self.cost_total = cost_total
+
 
         #plt.plot(self.state_rollouts[:, :, 0], self.state_rollouts[:, :, 1], 'r-', alpha=0.1)
         #plt.plot(local_goal[0], local_goal[1], 'g*')
         #plt.show()
 
-        #plt.plot(self.state_rollouts[0, :, 0], self.state_rollouts[0, :, 1], 'r-', alpha=0.1)
-        #plt.plot(local_goal[0], local_goal[1], 'g*')
-        #plt.show()
+        #print("cost_tracking", np.min(cost_tracking), np.max(cost_tracking), np.max(cost_tracking) - np.min(cost_tracking))
+        #print("cost_control", np.min(cost_sample), np.max(cost_sample), np.max(cost_sample) - np.min(cost_sample))
 
-        return cost_tracking #+ cost_sample 
+
+
+        return 7.0 * cost_sample + 0.3 * cost_tracking + cost_collision
+    
+
+    def get_collision_check(self, positions, occupancy_grid):
+        # transform occupancy grid to numpy array
+        occ = np.array(occupancy_grid, dtype=bool)
+        S = occ.shape[0]
+        half = self.sensor
 
 
 

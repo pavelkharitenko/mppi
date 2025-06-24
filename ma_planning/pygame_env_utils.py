@@ -49,38 +49,32 @@ def update_moving_obstacles(obstacles, dt, map_bounds):
         obstacles["moving"][i] = (x,y, r,vx, vy)
 
 class Robot:
-    def __init__(self, x, y, theta, goal, sensor_range, dynamics_model, controller=None, radius=0.5, local_planning=True):
+    def __init__(self, x, y, theta, goal, sensor_range, dynamics_model, controller=None, radius=0.5):
         self.state = np.array([x, y, theta])
         self.radius = radius
         self.target = goal
         self.sensor_range = sensor_range
         self.model = dynamics_model
         self.controller = controller
-        self.local_planning = local_planning
         self.planned_trajectory = np.array([])
-
-        if self.local_planning:
-            self.planner = Planner(goal, sensor_range)
-        else:
-            self.planner = None  # No planner needed in tracking mode
+        self.planner = Planner(goal, sensor_range)
+        
 
     def update(self, dt, obstacles):
         """
         If robot has own controller.
         """
-        if self.local_planning:
-            self.planner.update_local_map(self.state, obstacles)
-            local_goal = self.planner.plan((self.state[0], self.state[1]))
-            occupancy_grid = self.planner.grid
-        else:
-            local_goal = self.target  # Or None, depending on controller needs
-            occupancy_grid = None
+        
+        self.planner.update_local_map(self.state, obstacles)
+        local_goal = self.planner.plan((self.state[0], self.state[1]))
+        grid_info = self.planner.grid_info
 
-        u = self.controller.compute_action(self.state, local_goal, occupancy_grid)
+
+        u = self.controller.compute_action(self.state, local_goal, grid_info)
 
         # Save planned trajectory if controller supports it
         if hasattr(self.controller, "optimal_rollout"):
-            self.planned_trajectory = self.controller.optimal_rollout
+            self.planned_trajectory = self.controller.optimal_rollout[0]
 
         self.state = self.model.step(self.state, u, dt)
 
@@ -89,6 +83,7 @@ class Robot:
         If high-level multi-agent controller computed control input, just update state.
         """
         self.state = self.model.step(self.state, control, dt)
+
 
     def set_planned_trajectory(self, trajectory):
         self.planned_trajectory = trajectory
@@ -99,19 +94,17 @@ class Robot:
         x_px, y_px = world_to_screen(x, y, screen_height_px, scale)
 
         # Draw sensor range if enabled
-        if self.local_planning:
-            pygame.draw.circle(screen, LIGHT_BLUE, (x_px, y_px), int(self.sensor_range * scale), width=1)
+        pygame.draw.circle(screen, LIGHT_BLUE, (x_px, y_px), int(self.sensor_range * scale), width=1)
 
         # Draw global goal
         gx, gy = self.target
         gx_px, gy_px = world_to_screen(gx, gy, screen_height_px, scale)
         pygame.draw.circle(screen, LIGHT_GREEN, (gx_px, gy_px), 6)
 
-        # Draw local goal (only in local mode)
-        if self.local_planning:
-            tx, ty = self.planner.plan((x, y))
-            tx_px, ty_px = world_to_screen(tx, ty, screen_height_px, scale)
-            pygame.draw.circle(screen, GREEN, (tx_px, ty_px), 4)
+        # Draw local goal 
+        tx, ty = self.planner.plan((x, y))
+        tx_px, ty_px = world_to_screen(tx, ty, screen_height_px, scale)
+        pygame.draw.circle(screen, GREEN, (tx_px, ty_px), 4)
 
         # Draw robot
         pygame.draw.circle(screen, GREEN, (x_px, y_px), int(self.radius * scale))
@@ -120,14 +113,17 @@ class Robot:
         pygame.draw.line(screen, BLACK, (x_px, y_px), (x_px + int(dx), y_px + int(dy)), 2)
 
         # Draw occupancy grid if local planning
-        if self.local_planning and self.planner.grid:
+        if self.planner.grid:
             size = len(self.planner.grid)
             cell_size = self.planner.map_resolution * scale
             for i in range(size):
                 for j in range(size):
                     if self.planner.grid[i][j]:
                         wx = x + (j * self.planner.map_resolution - self.sensor_range)
+                        #wx = x - self.sensor_range + j * self.planner.grid_res + self.planner.grid_res/2
                         wy = y + (i * self.planner.map_resolution - self.sensor_range)
+                        #wy = y - self.sensor_range + i * self.planner.grid_res + self.planner.grid_res/2
+
                         rect_x, rect_y = world_to_screen(wx, wy, screen_height_px, scale)
                         rect = pygame.Rect(rect_x, rect_y, cell_size, cell_size)
                         pygame.draw.rect(screen, GRAY, rect)

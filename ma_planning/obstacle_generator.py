@@ -1,6 +1,6 @@
 import random, math
 
-def generate_forest(area_width_m, area_height_m, tree_density_per_m2=0.01, tree_radius=0.2, min_obstacle_spacing=1.0, seed=0.0):
+def generate_forest(area_width_m, area_height_m, tree_density_per_m2=0.01, tree_radius=0.2, min_obstacle_spacing=1.0, seed=4.0):
     """
     Generates non-overlapping trees as circular obstacles.
     Each tree is at least `min_obstacle_spacing` meters apart from others.
@@ -51,7 +51,7 @@ def generate_giant_shapes(area_width_m, area_height_m, num_shapes, radius_range=
     return {"static": shapes, "moving": []}
 
 
-def generate_moving_obstacles(area_width_m, area_height_m, num_moving, radius=0.5, velocity_range=(0.5, 2.0)):
+def generate_moving_obstacles(area_width_m, area_height_m, num_moving, radius=0.5, velocity_range=(0.2, 1.0)):
     """
     Generates moving circular obstacles with linear velocity in m/s.
     Returns: {"static": [], "moving": [{"pos": [x, y], "radius": r, "vel": [vx, vy]}]}
@@ -66,7 +66,7 @@ def generate_moving_obstacles(area_width_m, area_height_m, num_moving, radius=0.
     return {"static": [], "moving": moving}
 
 
-def generate_mixed_scene(area_width_m, area_height_m, tree_density=0.1, num_moving=5, tree_radius=0.4):
+def generate_mixed_scene(area_width_m, area_height_m, tree_density=0.028, num_moving=5, tree_radius=1.2):
     """
     Combines forest and moving obstacles.
     Returns: {"static": [...], "moving": [...]}

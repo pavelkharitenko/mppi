@@ -1,5 +1,15 @@
 import math
 from itertools import chain
+import numpy as np
+
+from dataclasses import dataclass
+
+@dataclass
+class GridInfo:
+    occ: np.ndarray
+    half: float
+    res: float
+    S: int
 
 
 class Planner:
@@ -7,7 +17,11 @@ class Planner:
         self.goal = goal  # (x_goal, y_goal)
         self.sensor_range = sensor_range  # in meters
         self.map_resolution = map_resolution
+        #self.grid_res = 0.25 * self.map_resolution
         self.grid = None
+        self.grid_np = None
+        self.grid_info = None
+
 
     def plan(self, robot_pos):
         x, y = robot_pos
@@ -28,40 +42,40 @@ class Planner:
 
     def update_local_map(self, robot_pos, obstacles):
         x, y, theta = robot_pos
-        size = int((2 * self.sensor_range) / self.map_resolution)
-        grid = [[0 for _ in range(size)] for _ in range(size)]
-        half_range = self.sensor_range
-        resolution = self.map_resolution
+        half = self.sensor_range
+        res  = self.map_resolution
+        size = int((2 * half) / res)
 
-        for ox, oy, r in chain(obstacles["static"], [(x, y, r) for (x, y, r, vx, vy) in obstacles["moving"]]):
-            dx = ox - x
-            dy = oy - y
-            dist = math.hypot(dx, dy)
+        # ---------- 1. grid–cell centres in world frame ----------
+        gx = np.linspace(x - half + res/2,  x + half - res/2, size)   # shape (size,)
+        gy = np.linspace(y - half + res/2,  y + half - res/2, size)   # shape (size,)
+        cx, cy = np.meshgrid(gx, gy)                                  # each (size, size)
 
-            if dist <= self.sensor_range + r:
-                min_x = ox - r
-                max_x = ox + r
-                min_y = oy - r
-                max_y = oy + r
+        # ---------- 2. obstacle catalogue ----------
+        # static : (x, y, r)    moving : (x, y, r, vx, vy) → keep first three
+        obs = np.array([
+            (ox, oy, r) for (ox, oy, r) in obstacles["static"]
+        ] + [
+            (ox, oy, r) for (ox, oy, r, vx, vy) in obstacles["moving"]
+        ])
 
-                gx_min = int((min_x - (x - half_range)) / resolution)
-                gx_max = int((max_x - (x - half_range)) / resolution) + 1
-                gy_min = int((min_y - (y - half_range)) / resolution)
-                gy_max = int((max_y - (y - half_range)) / resolution) + 1
+        if obs.size == 0:
+            self.grid = [[0]*size for _ in range(size)]
+            return
 
-                for gx in range(gx_min, gx_max):
-                    for gy in range(gy_min, gy_max):
-                        if 0 <= gx < size and 0 <= gy < size:
-                            cx = x - half_range + gx * resolution + resolution / 2
-                            cy = y - half_range + gy * resolution + resolution / 2
-                            # Use a tighter threshold by expanding cell size as an area patch
-                            corners = [
-                                (cx - resolution / 2, cy - resolution / 2),
-                                (cx + resolution / 2, cy - resolution / 2),
-                                (cx - resolution / 2, cy + resolution / 2),
-                                (cx + resolution / 2, cy + resolution / 2)
-                            ]
-                            if any(math.hypot(px - ox, py - oy) <= r for px, py in corners):
-                                grid[gy][gx] = 1
+        ox   = obs[:, 0][:, None, None]         # (N,1,1)
+        oy   = obs[:, 1][:, None, None]         # (N,1,1)
+        rad2 = obs[:, 2][:, None, None]**2      # squared radii  (N,1,1)
 
-        self.grid = grid
+        # ---------- 3. vectorised distance test ----------
+        dx2  = (cx - ox)**2                     # (N,size,size)
+        dy2  = (cy - oy)**2
+        inside = (dx2 + dy2) <= rad2            # boolean mask
+
+        # ---------- 4. collapse over obstacles ----------
+        occ_grid = np.any(inside, axis=0)       # (size,size)  True → occupied
+
+        self.grid = occ_grid.astype(int).tolist()
+
+        self.grid_np = np.array(self.grid, dtype=bool)
+        self.grid_info = GridInfo(self.grid_np, half, res, size)

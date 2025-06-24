@@ -23,11 +23,11 @@ class DifferentialDriveDynamics:
         v, w = control           # control: linear velocity (v), angular velocity (w)
         #dt = self.dt
 
-        x += v * math.cos(theta) * dt
-        y += v * math.sin(theta) * dt
+        x += v * np.cos(theta) * dt
+        y += v * np.sin(theta) * dt
         theta += w * dt
 
-        return x, y, theta
+        return np.array([x, y, theta])
 
     def step_vectorized(self, states, controls, dt):
         x = states[:, 0]
@@ -37,8 +37,8 @@ class DifferentialDriveDynamics:
         v = controls[:, 0]
         w = controls[:, 1]
 
-        x_next = x + np.cos(theta) * dt
-        y_next = y + np.sin(theta) * dt
+        x_next = x + v * np.cos(theta) * dt
+        y_next = y + v * np.sin(theta) * dt
 
         theta_next = theta + w * dt
 
