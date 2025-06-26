@@ -1,6 +1,6 @@
 import random, math
 
-def generate_forest(area_width_m, area_height_m, tree_density_per_m2=0.01, tree_radius=0.2, min_obstacle_spacing=1.0, seed=4.0):
+def generate_forest(area_width_m, area_height_m, tree_density_per_m2=0.01, tree_radius=0.2, min_obstacle_spacing=1.0, seed=9.0):
     """
     Generates non-overlapping trees as circular obstacles.
     Each tree is at least `min_obstacle_spacing` meters apart from others.

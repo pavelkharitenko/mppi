@@ -32,16 +32,17 @@ num_robots = 2
 
 diffdrive = DifferentialDriveDynamics()
 
+
+# SA MPPI
 #robots = create_circle_robots_with_antipolar_goals(num_robots=num_robots, center=circle_center, radius=circle_radius, dynamics_model=diffdrive)
+#robots = create_circle_robots_tangential(num_robots=num_robots, center=circle_center, radius=circle_radius, dynamics_model=diffdrive)
 
-robots = create_circle_robots_tangential(num_robots=num_robots, center=circle_center, radius=circle_radius, dynamics_model=diffdrive)
+# SA D4orm
+robots = create_circle_robots_tangential_sa_d4orm(num_robots=num_robots, center=circle_center, radius=circle_radius, dynamics_model=diffdrive)
 
-mamppi_controller = MAMPPIController(model=diffdrive, horizon=100, 
-                                    stepsize=0.02,
-                                    num_samples=400,
-                                    lambda_=0.01,
-                                    noise_std=np.array([0.1,0.02]),
-                                    num_robots=num_robots)
+
+mamppi_controller = MAMPPIController(model=diffdrive, horizon=100, stepsize=0.02, num_samples=400, lambda_=0.01, 
+                                     noise_std=np.array([0.1,0.02]), num_robots=num_robots)
 
 use_centralized_alg = False  # ← SWITCH THIS TO COMPARE CONTROLLERS
 

@@ -118,7 +118,7 @@ def plot_rollouts_with_collision(rollouts, weights, collided_mask, goal=None, op
     if optimal_rollout is not None:
         best_xy = optimal_rollout[0, :, :2]
         ax.plot(best_xy[:, 0], best_xy[:, 1],
-                color='red', linewidth=3.0, label='Best rollout')
+                color='red', linewidth=3.0, label='Optimal rollout')
 
     if goal is not None:
         ax.plot(goal[0], goal[1], 'g*', markersize=15, label="Goal")
@@ -131,4 +131,43 @@ def plot_rollouts_with_collision(rollouts, weights, collided_mask, goal=None, op
     ax.set_title("Rollouts with Collision (dashed) and Weight Coloring")
     ax.legend(loc='upper right')
     plt.grid(True)
+    plt.show()
+
+
+def plot_cost_weight_debug(costs, weights, lambda_):
+
+    plt.figure(figsize=(8, 5))
+    plt.scatter(costs, weights, c=weights, cmap='viridis')
+    plt.colorbar(label="Weight")
+    plt.xlabel("Total Cost")
+    plt.ylabel("MPPI Weight")
+    plt.title(f"Cost vs. Weight (λ = {lambda_})")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_cost_components(cost_control, cost_tracking, cost_collision, cost_total=None):
+
+    components = {
+        "Control": cost_control,
+        "Tracking": cost_tracking,
+        "Collision": cost_collision
+    }
+    if cost_total is not None:
+        components["Total"] = cost_total
+
+    fig, axes = plt.subplots(1, len(components), figsize=(5 * len(components), 4))
+
+    if len(components) == 1:
+        axes = [axes]
+
+    for ax, (name, data) in zip(axes, components.items()):
+        ax.hist(data, bins=30, color='skyblue', edgecolor='black')
+        ax.set_title(f"{name} Cost\nMin: {np.min(data):.2f} | Max: {np.max(data):.2f}")
+        ax.set_xlabel("Cost")
+        ax.set_ylabel("Frequency")
+        ax.grid(True)
+
+    plt.tight_layout()
     plt.show()

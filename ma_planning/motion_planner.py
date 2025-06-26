@@ -36,11 +36,11 @@ def create_circle_robots_with_antipolar_goals(num_robots, center, radius, dynami
         if use_single_agent_controller:
             controller = MPPIController(
                 model=dynamics_model,
-                horizon=200,
-                stepsize=0.02,
-                num_samples=1200,
-                lambda_=75.0,
-                noise_std=np.array([0.4, 1.5])
+                horizon=150,
+                stepsize=1.0/60.0,
+                num_samples=550,
+                lambda_=35.0,
+                noise_std=np.array([0.4, 1.2])
             )
         else:
             controller = None  # MAMPPI will be used instead
@@ -100,11 +100,55 @@ def create_circle_robots_tangential(num_robots,
         if use_single_agent_controller:
             controller = MPPIController(
                 model=dynamics_model,
-                horizon=250,
+                horizon=200,
                 stepsize=1.0/60.0,
-                num_samples=2000,
+                num_samples=700,
                 lambda_=45.0,
                 noise_std=np.array([0.4, 1.2])
+            )
+        else:
+            controller = None  # shared MA controller
+
+        robots.append(
+            Robot(
+                x, y, theta,
+                goal=(gx, gy),
+                sensor_range=6.0,
+                dynamics_model=dynamics_model,
+                controller=controller,
+            )
+        )
+
+    return robots
+
+
+
+def create_circle_robots_tangential_sa_d4orm(num_robots,
+                             center,
+                             radius,
+                             dynamics_model,
+                             clockwise=True,
+                             use_single_agent_controller=True):
+    """
+    Creates robots on a circle, tangential heading, antipodal goals.
+    """
+    start_positions = generate_circle_positions_tangential(
+        num_robots, center, radius, clockwise=clockwise
+    )
+    goal_positions = assign_antipodal_goals(start_positions)
+
+    robots = []
+    for i, ((x, y, theta), (gx, gy)) in enumerate(zip(start_positions, goal_positions)):
+
+        if use_single_agent_controller:
+            controller = D4ormSAController(
+                model=dynamics_model,
+                horizon=200,
+                diffusion_steps=20,
+                stepsize=1.0/60.0,
+                num_samples=3,
+                lambda_=45.0,
+                alpha_decay=0.96
             )
         else:
             controller = None  # shared MA controller
